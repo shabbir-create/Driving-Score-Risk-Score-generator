@@ -8,7 +8,7 @@ app = FastAPI()
 # =========================
 # LOAD MODEL + SCALER
 # =========================
-model = load_model("models/lstm_model.h5",compile=False)
+model = load_model("models/lstm_model.keras",compile=False)
 
 with open("results/scaler.pkl", "rb") as f:
     scaler = pickle.load(f)
