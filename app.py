@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import pickle
-from keras.models import load_model
+import joblib
 
 from src.config import SENSOR_COLS, WINDOW_SIZE, STEP_SIZE
 
@@ -43,7 +43,7 @@ st.markdown("""
 # -----------------------
 @st.cache_resource
 def load_all():
-    model = load_model("models/lstm_model.h5", compile=False)
+    model = joblib.load("model.pkl")
     with open("results/scaler.pkl", "rb") as f:
         scaler = pickle.load(f)
     return model, scaler
