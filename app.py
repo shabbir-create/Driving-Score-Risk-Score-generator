@@ -7,7 +7,39 @@ from tensorflow.keras.models import load_model
 from src.config import SENSOR_COLS, WINDOW_SIZE, STEP_SIZE
 
 # -----------------------
-# Load model + scaler
+# PAGE CONFIG
+# -----------------------
+st.set_page_config(
+    page_title="Driving AI",
+    layout="wide",
+    page_icon="🚗"
+)
+
+# -----------------------
+# CUSTOM CSS (Premium UI 🔥)
+# -----------------------
+st.markdown("""
+    <style>
+    .main {
+        background-color: #0e1117;
+        color: white;
+    }
+    .stMetric {
+        background: linear-gradient(135deg, #1f4037, #99f2c8);
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+    }
+    .stButton>button {
+        background-color: #00c6ff;
+        color: white;
+        border-radius: 10px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# -----------------------
+# LOAD MODEL
 # -----------------------
 @st.cache_resource
 def load_all():
@@ -19,7 +51,7 @@ def load_all():
 model, scaler = load_all()
 
 # -----------------------
-# Functions
+# FUNCTIONS
 # -----------------------
 def create_windows(data):
     windows = []
@@ -44,85 +76,93 @@ def get_status(score):
     else:
         return "🔴 DANGEROUS"
 
-# -----------------------
-# UI
-# -----------------------
-st.set_page_config(page_title="Driving Behavior Detection", layout="wide")
-
-st.title("🚗 Driving Behavior Detection System")
-
-uploaded_file = st.file_uploader("📂 Upload your CSV file", type=["csv"])
+@st.cache_data
+def prepare_data(df):
+    df['Acc_Mag'] = np.sqrt(df['X_Acc']**2 + df['Y_Acc']**2 + df['Z_Acc']**2)
+    df['Gyro_Mag'] = np.sqrt(df['X_Gyro']**2 + df['Y_Gyro']**2 + df['Z_Gyro']**2)
+    return df
 
 # -----------------------
-# Main Logic
+# SIDEBAR
 # -----------------------
+st.sidebar.title("⚙️ Settings")
+
+show_graphs = st.sidebar.checkbox("Show Graphs", value=True)
+max_points = st.sidebar.slider("Graph Resolution", 100, 2000, 500)
+
+# -----------------------
+# MAIN UI
+# -----------------------
+st.title("🚗 Driving Behavior AI Dashboard")
+
+uploaded_file = st.file_uploader("📂 Upload CSV File", type=["csv"])
+
 if uploaded_file:
 
     df = pd.read_csv(uploaded_file)
 
-    # -----------------------
-    # Preview
-    # -----------------------
-    st.subheader("📄 Data Preview")
-    st.dataframe(df.head())
+    # Tabs for clean UI
+    tab1, tab2, tab3 = st.tabs(["📊 Results", "📈 Graphs", "📄 Data"])
 
     # -----------------------
-    # Prediction
+    # TAB 1 → RESULT
     # -----------------------
-    st.subheader("🤖 Model Prediction")
+    with tab1:
 
-    data = df[SENSOR_COLS].values
+        data = df[SENSOR_COLS].values
+        windows = create_windows(data)
 
-    windows = create_windows(data)
+        X = scaler.transform(
+            windows.reshape(-1, windows.shape[-1])
+        ).reshape(windows.shape)
 
-    X = scaler.transform(
-        windows.reshape(-1, windows.shape[-1])
-    ).reshape(windows.shape)
+        with st.spinner("🤖 Analyzing driving behavior..."):
+            preds = model.predict(X, verbose=0)
 
-    preds = model.predict(X, verbose=0)
+        score = calculate_score(preds)
+        status = get_status(score)
 
-    score = calculate_score(preds)
-    status = get_status(score)
+        col1, col2 = st.columns(2)
 
-    # -----------------------
-    # Result
-    # -----------------------
-    st.subheader("🎯 Result")
+        with col1:
+            st.metric("🚗 Driving Score", f"{score}/100")
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.metric("Driving Score", f"{score}/100")
-
-    with col2:
-        st.success(f"Status: {status}")
+        with col2:
+            st.metric("📌 Status", status)
 
     # -----------------------
-    # Graphs (MOVED TO BOTTOM ✅)
+    # TAB 2 → GRAPHS
     # -----------------------
-    st.subheader("📊 Sensor Visualization")
+    with tab2:
 
-    df['Acc_Mag'] = np.sqrt(
-        df['X_Acc']**2 + df['Y_Acc']**2 + df['Z_Acc']**2
-    )
+        if show_graphs:
 
-    df['Gyro_Mag'] = np.sqrt(
-        df['X_Gyro']**2 + df['Y_Gyro']**2 + df['Z_Gyro']**2
-    )
+            df = prepare_data(df)
 
-    col1, col2 = st.columns(2)
+            if len(df) > max_points:
+                df_plot = df.iloc[::len(df)//max_points]
+            else:
+                df_plot = df
 
-    with col1:
-        st.write("### Accelerometer Magnitude")
-        st.line_chart(df['Acc_Mag'])
+            col1, col2 = st.columns(2)
 
-    with col2:
-        st.write("### Gyroscope Magnitude")
-        st.line_chart(df['Gyro_Mag'])
+            with col1:
+                st.subheader("Accelerometer")
+                st.line_chart(df_plot['Acc_Mag'])
 
-    st.write("### Raw Sensor Data")
-    st.line_chart(df[['X_Acc', 'Y_Acc', 'Z_Acc']])
-    st.line_chart(df[['X_Gyro', 'Y_Gyro', 'Z_Gyro']])
+            with col2:
+                st.subheader("Gyroscope")
+                st.line_chart(df_plot['Gyro_Mag'])
+
+            st.subheader("Raw Sensor Data")
+            st.line_chart(df_plot[['X_Acc', 'Y_Acc', 'Z_Acc']])
+            st.line_chart(df_plot[['X_Gyro', 'Y_Gyro', 'Z_Gyro']])
+
+    # -----------------------
+    # TAB 3 → DATA
+    # -----------------------
+    with tab3:
+        st.dataframe(df.head(100))
 
 else:
-    st.info("👆 Please upload a CSV file to start analysis")
+    st.info("👆 Upload a CSV file to start")
